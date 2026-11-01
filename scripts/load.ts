@@ -1,7 +1,8 @@
 import fs from "node:fs";
 import { pipeline } from "node:stream/promises";
 import { from as copyFrom } from "pg-copy-streams";
-import { pool } from "../src/db.js";
+import pg from "pg";
+const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 
 // Parents first, so foreign keys always find their rows
 const files: [string, string][] = [
