@@ -3,6 +3,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { pool } from "./db.js";
 import { validateSql } from "./guard.js";
+import { logQuery } from "./audit.js";
 
 const server = new McpServer({ name: "sql-agent", version: "0.1.0" });
 
@@ -34,23 +35,28 @@ server.registerTool("run_query",
     inputSchema: { sql: z.string().describe("A single PostgreSQL SELECT statement") },
   },
   async ({ sql }) => {
+    const start = Date.now();
     const check = validateSql(sql);
     if (!check.ok) {
-      return { isError: true, content: [{ type: "text", text: `Query blocked: ${check.reason}` }] };
+      await logQuery({ tool: "run_query", sql, status: "blocked", errorMessage: check.reason, durationMs: Date.now() - start });
+      return { isError: true, content: [{ type: "text", text: "Query blocked: " + check.reason }] };
     }
     const client = await pool.connect();
     try {
       await client.query("BEGIN READ ONLY");
       await client.query("SET LOCAL statement_timeout = '5s'");
       const result = await client.query(
-        `SELECT * FROM (${check.sql}) AS q LIMIT ${MAX_ROWS + 1}`);
+        "SELECT * FROM (" + check.sql + ") AS q LIMIT " + (MAX_ROWS + 1));
       await client.query("ROLLBACK");
       const truncated = result.rows.length > MAX_ROWS;
       const rows = result.rows.slice(0, MAX_ROWS);
+      await logQuery({ tool: "run_query", sql, status: "ok", rowCount: rows.length, durationMs: Date.now() - start });
       return { content: [{ type: "text", text: JSON.stringify({ rowCount: rows.length, truncated, rows }) }] };
     } catch (err) {
       await client.query("ROLLBACK").catch(() => {});
-      return { isError: true, content: [{ type: "text", text: `Query failed: ${(err as Error).message}` }] };
+      const message = (err as Error).message;
+      await logQuery({ tool: "run_query", sql, status: "error", errorMessage: message, durationMs: Date.now() - start });
+      return { isError: true, content: [{ type: "text", text: "Query failed: " + message }] };
     } finally {
       client.release();
     }
