@@ -17,19 +17,29 @@ const SYSTEM_PROMPT = [
 ].join("\n");
 
 async function callGroq(messages: Message[], tools: Message[]): Promise<Message> {
-  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": "Bearer " + process.env.GROQ_API_KEY,
-    },
-    body: JSON.stringify({ model: MODEL, messages, tools, tool_choice: "auto", temperature: 0 }),
-  });
-  if (!res.ok) {
+  const MAX_RETRIES = 3;
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + process.env.GROQ_API_KEY,
+      },
+      body: JSON.stringify({ model: MODEL, messages, tools, tool_choice: "auto", temperature: 0 }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return data.choices[0].message;
+    }
+    if (res.status === 429 && attempt < MAX_RETRIES) {
+      const retryAfter = Number(res.headers.get("retry-after"));
+      const waitSeconds = retryAfter > 0 ? retryAfter + 1 : 5 * 2 ** attempt;
+      console.log("[rate limited] waiting " + waitSeconds + "s, then retrying (" + (attempt + 1) + "/" + MAX_RETRIES + ")");
+      await new Promise((resolve) => setTimeout(resolve, waitSeconds * 1000));
+      continue;
+    }
     throw new Error("Groq API error " + res.status + ": " + (await res.text()));
   }
-  const data = await res.json();
-  return data.choices[0].message;
 }
 
 async function main() {
