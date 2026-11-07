@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Olist Data Agent</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+<style>
+:root {
+  --bg: #f7f7f5; --panel: #ffffff; --text: #1d1d1f; --muted: #6e6e73;
+  --border: #e5e5e0; --accent: #2f6f4f; --accent-soft: #e8f2ec;
+  --error: #b42318; --code: #f2f2ee;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111312; --panel: #1a1d1b; --text: #ececea; --muted: #9a9e9b;
+    --border: #2a2e2c; --accent: #3d8a63; --accent-soft: #1f2a24;
+    --error: #f97066; --code: #222624;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); display: flex; flex-direction: column; height: 100vh; }
+header { padding: 16px 24px; border-bottom: 1px solid var(--border); background: var(--panel); }
+header h1 { margin: 0; font-size: 18px; }
+header p { margin: 4px 0 0; font-size: 13px; color: var(--muted); }
+main { flex: 1; overflow-y: auto; padding: 24px; }
+.wrap { max-width: 820px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
+.empty { text-align: center; color: var(--muted); margin-top: 8vh; }
+.empty h2 { color: var(--text); font-weight: 600; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 16px; }
+.chip { border: 1px solid var(--border); background: var(--panel); color: var(--text); padding: 8px 14px; border-radius: 999px; cursor: pointer; font-size: 14px; }
+.chip:hover { border-color: var(--accent); }
+.user { align-self: flex-end; background: var(--accent); color: #fff; padding: 10px 16px; border-radius: 18px 18px 4px 18px; max-width: 75%; }
+.bot { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px; }
+.steps { list-style: none; margin: 0 0 8px; padding: 0; font-size: 13px; color: var(--muted); }
+.steps li { padding: 3px 0; }
+.steps li::before { content: "✓ "; color: var(--accent); }
+.steps summary { cursor: pointer; }
+.err { color: var(--error); }
+.answer table { border-collapse: collapse; margin: 8px 0; font-size: 14px; }
+.answer th, .answer td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; }
+.answer th { background: var(--accent-soft); }
+pre, code { background: var(--code); border-radius: 6px; font-family: ui-monospace, Consolas, monospace; font-size: 13px; }
+pre { padding: 10px; overflow-x: auto; white-space: pre-wrap; }
+code { padding: 1px 4px; }
+pre code { padding: 0; }
+.thinking { color: var(--muted); font-size: 13px; }
+.thinking::after { content: "..."; display: inline-block; width: 0; overflow: hidden; vertical-align: bottom; animation: dots 1.2s steps(4) infinite; }
+@keyframes dots { to { width: 1.2em; } }
+footer { padding: 14px 24px 20px; border-top: 1px solid var(--border); background: var(--panel); }
+form { max-width: 820px; margin: 0 auto; display: flex; gap: 10px; }
+input { flex: 1; padding: 12px 16px; border-radius: 12px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 15px; }
+input:focus { outline: 2px solid var(--accent); border-color: transparent; }
+.send { padding: 0 20px; border: none; border-radius: 12px; background: var(--accent); color: #fff; font-size: 15px; cursor: pointer; }
+.send:disabled, .chip:disabled { opacity: 0.5; cursor: not-allowed; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Olist Data Agent</h1>
+  <p>Ask questions about 100k real e-commerce orders. The agent writes and runs read-only SQL.</p>
+</header>
+<main id="chat">
+  <div class="wrap" id="wrap">
+    <div class="empty" id="empty">
+        <h2>What would you like to know?</h2>
+      <p>Try one of these:</p>
+      <div class="chips">
+        <button class="chip">Which 5 product categories have the highest revenue?</button>
+        <button class="chip">What percentage of delivered orders arrived late?</button>
+        <button class="chip">Which states have the longest delivery times?</button>
+        <button class="chip">How many unique customers are there?</button>
+      </div>
+    </div>
+  </div>
+</main>
+<footer>
+  <form id="form">
+    <input id="q" placeholder="Ask about orders, revenue, deliveries, reviews..." autocomplete="off" maxlength="500">
+    <button class="send" id="send" type="submit">Ask</button>
+  </form>
+</footer>
+<script>
+const LABELS = {
+  get_metric_definitions: "Reading metric definitions",
+  list_tables: "Listing tables",
+  describe_table: "Inspecting table",
+  run_query: "Running SQL query"
+};
+const wrap = document.getElementById("wrap");
+const chat = document.getElementById("chat");
+const form = document.getElementById("form");
+const input = document.getElementById("q");
+const sendBtn = document.getElementById("send");
+let busy = false;
+
+function el(tag, cls, text) {
+  const node = document.createElement(tag);
+  if (cls) node.className = cls;
+  if (text) node.textContent = text;
+  return node;
+}
+
+function scrollDown() {
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function setBusy(value) {
+  busy = value;
+  input.disabled = value;
+  sendBtn.disabled = value;
+  document.querySelectorAll(".chip").forEach(function (c) { c.disabled = value; });
+  if (!value) input.focus();
+}
+
+function ask(question) {
+  if (busy) return;
+  const empty = document.getElementById("empty");
+  if (empty) empty.remove();
+
+  wrap.appendChild(el("div", "user", question));
+  const bot = el("div", "bot");
+  const steps = el("ul", "steps");
+  const thinking = el("div", "thinking", "Thinking");
+  const answer = el("div", "answer");
+  bot.append(steps, thinking, answer);
+  wrap.appendChild(bot);
+  scrollDown();
+  setBusy(true);
+
+  const source = new EventSource("/api/ask?q=" + encodeURIComponent(question));
+
+  source.onmessage = function (msg) {
+    const event = JSON.parse(msg.data);
+    if (event.type === "tool_call") {
+      let label = LABELS[event.name] || event.name;
+      if (event.name === "describe_table") label += ": " + event.args.table;
+      const li = el("li");
+      if (event.name === "run_query") {
+        const details = el("details");
+        details.appendChild(el("summary", null, label));
+        details.appendChild(el("pre", null, event.args.sql));
+        li.appendChild(details);
+      } else {
+        li.textContent = label;
+      }
+      steps.appendChild(li);
+    } else if (event.type === "tool_result" && event.isError) {
+      steps.appendChild(el("li", "err", "Query problem, adjusting: " + event.text.slice(0, 200)));
+    } else if (event.type === "retry") {
+      thinking.textContent = "Rate limited, waiting " + event.waitSeconds + "s";
+    } else if (event.type === "answer") {
+      answer.innerHTML = DOMPurify.sanitize(marked.parse(event.text));
+    } else if (event.type === "error") {
+      answer.appendChild(el("p", "err", "Error: " + event.message));
+    } else if (event.type === "done") {
+      source.close();
+      thinking.remove();
+      setBusy(false);
+    }
+    scrollDown();
+  };
+
+  source.onerror = function () {
+    source.close();
+    thinking.remove();
+    answer.appendChild(el("p", "err", "Connection lost. Please try again."));
+    setBusy(false);
+  };
+}
+
+form.addEventListener("submit", function (e) {
+  e.preventDefault();
+  const question = input.value.trim();
+  if (!question) return;
+  input.value = "";
+  ask(question);
+});
+
+document.querySelectorAll(".chip").forEach(function (chip) {
+  chip.addEventListener("click", function () { ask(chip.textContent.trim()); });
+});
+</script>
+</body>
+</html>
