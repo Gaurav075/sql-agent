@@ -3,70 +3,105 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Olist Data Agent</title>
+<title>sql-agent · Olist Data Agent</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
 <style>
 :root {
-  --bg: #f7f7f5; --panel: #ffffff; --text: #1d1d1f; --muted: #6e6e73;
-  --border: #e5e5e0; --accent: #2f6f4f; --accent-soft: #e8f2ec;
-  --error: #b42318; --code: #f2f2ee;
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #111312; --panel: #1a1d1b; --text: #ececea; --muted: #9a9e9b;
-    --border: #2a2e2c; --accent: #3d8a63; --accent-soft: #1f2a24;
-    --error: #f97066; --code: #222624;
-  }
+  --bg: #0a0e14; --panel: #0f151f; --panel-2: #131b27; --border: #1f2b3b;
+  --text: #d4dbe5; --muted: #6b7a8f; --green: #3ddc97; --cyan: #4cc9f0;
+  --red: #ff6b6b; --yellow: #ffd166;
+  --mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+  --sans: Inter, system-ui, "Segoe UI", sans-serif;
 }
 * { box-sizing: border-box; }
-body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); display: flex; flex-direction: column; height: 100vh; }
-header { padding: 16px 24px; border-bottom: 1px solid var(--border); background: var(--panel); }
-header h1 { margin: 0; font-size: 18px; }
-header p { margin: 4px 0 0; font-size: 13px; color: var(--muted); }
-main { flex: 1; overflow-y: auto; padding: 24px; }
-.wrap { max-width: 820px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
-.empty { text-align: center; color: var(--muted); margin-top: 8vh; }
-.empty h2 { color: var(--text); font-weight: 600; }
-.chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 16px; }
-.chip { border: 1px solid var(--border); background: var(--panel); color: var(--text); padding: 8px 14px; border-radius: 999px; cursor: pointer; font-size: 14px; }
-.chip:hover { border-color: var(--accent); }
-.user { align-self: flex-end; background: var(--accent); color: #fff; padding: 10px 16px; border-radius: 18px 18px 4px 18px; max-width: 75%; }
-.bot { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px; }
-.steps { list-style: none; margin: 0 0 8px; padding: 0; font-size: 13px; color: var(--muted); }
-.steps li { padding: 3px 0; display: flex; gap: 6px; align-items: flex-start; }
-.steps li::before { content: "✓"; color: var(--accent); }
-.steps li.err::before { content: "✗"; color: var(--error); }
-.steps summary { cursor: pointer; }
-.err { color: var(--error); }
-.answer table { border-collapse: collapse; margin: 8px 0; font-size: 14px; }
-.answer th, .answer td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; }
-.answer th { background: var(--accent-soft); }
-pre, code { background: var(--code); border-radius: 6px; font-family: ui-monospace, Consolas, monospace; font-size: 13px; }
-pre { padding: 10px; overflow-x: auto; white-space: pre-wrap; }
-code { padding: 1px 4px; }
-pre code { padding: 0; }
-.thinking { color: var(--muted); font-size: 13px; }
-.thinking::after { content: "..."; display: inline-block; width: 0; overflow: hidden; vertical-align: bottom; animation: dots 1.2s steps(4) infinite; }
-@keyframes dots { to { width: 1.2em; } }
-footer { padding: 14px 24px 20px; border-top: 1px solid var(--border); background: var(--panel); }
-form { max-width: 820px; margin: 0 auto; display: flex; gap: 10px; }
-input { flex: 1; padding: 12px 16px; border-radius: 12px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 15px; }
-input:focus { outline: 2px solid var(--accent); border-color: transparent; }
-.send { padding: 0 20px; border: none; border-radius: 12px; background: var(--accent); color: #fff; font-size: 15px; cursor: pointer; }
-.send:disabled, .chip:disabled { opacity: 0.5; cursor: not-allowed; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--text); font-family: var(--sans);
+  display: flex; flex-direction: column;
+  background-image: linear-gradient(rgba(61,220,151,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(61,220,151,0.03) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+header { display: flex; align-items: center; justify-content: space-between; padding: 14px 24px; border-bottom: 1px solid var(--border); background: rgba(10,14,20,0.85); backdrop-filter: blur(8px); }
+.brand { font-family: var(--mono); font-weight: 700; font-size: 16px; color: var(--green); }
+.brand .cursor { display: inline-block; width: 9px; height: 16px; background: var(--green); margin-left: 4px; vertical-align: -2px; animation: blink 1s steps(1) infinite; }
+.brand small { color: var(--muted); font-weight: 400; margin-left: 10px; }
+.status { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.status .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px var(--green); margin-right: 6px; }
+@keyframes blink { 50% { opacity: 0; } }
+main { flex: 1; overflow-y: auto; padding: 28px 20px; }
+.wrap { max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+.empty { margin-top: 6vh; font-family: var(--mono); }
+.empty .prompt { color: var(--green); font-size: 14px; }
+.empty h2 { font-family: var(--sans); font-size: 28px; margin: 10px 0 6px; color: #fff; }
+.empty p { color: var(--muted); margin: 0 0 22px; font-family: var(--sans); }
+.chips { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; }
+.chip { text-align: left; font-family: var(--mono); font-size: 13px; color: var(--text); background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; cursor: pointer; transition: border-color 0.15s, transform 0.15s; }
+.chip::before { content: "> "; color: var(--green); }
+.chip:hover { border-color: var(--green); transform: translateY(-1px); }
+.user { align-self: flex-end; max-width: 80%; font-family: var(--mono); font-size: 14px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; padding: 10px 14px; }
+.user::before { content: "you $ "; color: var(--cyan); }
+.bot { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 18px 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.35); }
+.steps { list-style: none; margin: 0 0 12px; padding: 0 0 12px; border-bottom: 1px dashed var(--border); font-family: var(--mono); font-size: 12.5px; color: var(--muted); }
+.steps li { display: flex; gap: 8px; align-items: flex-start; padding: 2px 0; }
+.steps li::before { content: "✓"; color: var(--green); }
+.steps li.err::before { content: "✗"; color: var(--red); }
+.steps li.err { color: var(--red); }
+.steps details { flex: 1; min-width: 0; }
+.steps summary { cursor: pointer; color: var(--text); }
+.thinking { font-family: var(--mono); font-size: 13px; color: var(--yellow); }
+.thinking::after { content: ""; display: inline-block; width: 8px; height: 14px; background: var(--yellow); margin-left: 6px; vertical-align: -2px; animation: blink 1s steps(1) infinite; }
+.answer { line-height: 1.6; }
+.answer p { margin: 8px 0; }
+.answer strong { color: #fff; }
+.answer table { border-collapse: collapse; margin: 10px 0; font-size: 13.5px; font-family: var(--mono); width: 100%; }
+.answer th, .answer td { border-bottom: 1px solid var(--border); padding: 7px 10px; text-align: left; }
+.answer th { color: var(--green); font-weight: 500; border-bottom-color: var(--green); }
+.answer tr:hover td { background: var(--panel-2); }
+.answer code { font-family: var(--mono); background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-size: 13px; color: var(--cyan); }
+.codebox { position: relative; margin: 10px 0; }
+.codebox pre { margin: 0; background: #070a0f; border: 1px solid var(--border); border-radius: 10px; padding: 14px; overflow-x: auto; }
+.codebox pre code { background: none; padding: 0; color: #9fe6c4; white-space: pre-wrap; font-family: var(--mono); font-size: 12.5px; }
+.copy { position: absolute; top: 8px; right: 8px; font-family: var(--mono); font-size: 11px; color: var(--muted); background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px; cursor: pointer; }
+.copy:hover { color: var(--green); border-color: var(--green); }
+.chart { margin: 14px 0 6px; padding: 14px; background: #070a0f; border: 1px solid var(--border); border-radius: 10px; font-family: var(--mono); font-size: 12px; }
+.chart h4 { margin: 0 0 10px; font-size: 11px; color: var(--muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.08em; }
+.bar-row { display: grid; grid-template-columns: minmax(90px, 30%) 1fr auto; gap: 10px; align-items: center; margin: 6px 0; }
+.bar-label { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar-track { height: 10px; background: var(--panel-2); border-radius: 5px; overflow: hidden; }
+.bar-fill { height: 100%; width: 0; background: linear-gradient(90deg, var(--green), var(--cyan)); border-radius: 5px; transition: width 0.8s ease; }
+.bar-value { color: var(--muted); }
+.err-msg { color: var(--red); font-family: var(--mono); font-size: 13px; }
+footer { padding: 14px 20px 18px; border-top: 1px solid var(--border); background: rgba(10,14,20,0.9); }
+form { max-width: 860px; margin: 0 auto; display: flex; gap: 10px; align-items: center; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 6px 6px 6px 14px; }
+form:focus-within { border-color: var(--green); box-shadow: 0 0 0 3px rgba(61,220,151,0.12); }
+form .ps1 { font-family: var(--mono); color: var(--green); }
+input { flex: 1; min-width: 0; border: none; background: transparent; color: var(--text); font-family: var(--mono); font-size: 14px; padding: 8px 0; outline: none; }
+.send { font-family: var(--mono); font-weight: 700; font-size: 13px; padding: 9px 16px; border: none; border-radius: 8px; background: var(--green); color: #04130c; cursor: pointer; }
+.send:disabled, .chip:disabled { opacity: 0.4; cursor: not-allowed; }
+.hint { max-width: 860px; margin: 6px auto 0; font-family: var(--mono); font-size: 11px; color: var(--muted); }
+@media (max-width: 600px) {
+  header { padding: 12px 14px; }
+  .status { display: none; }
+  main { padding: 18px 12px; }
+  .user { max-width: 92%; }
+  .empty h2 { font-size: 22px; }
+}
 </style>
 </head>
 <body>
 <header>
-  <h1>Olist Data Agent</h1>
-  <p>Ask questions about 100k real e-commerce orders. The agent writes and runs read-only SQL.</p>
-</header>
+  <div class="brand">sql-agent<span class="cursor"></span><small>olist data agent</small></div>
+  <div class="status"><span class="dot"></span>postgres · read-only · 4 guardrails</div>
+  </header>
 <main id="chat">
   <div class="wrap" id="wrap">
     <div class="empty" id="empty">
-        <h2>What would you like to know?</h2>
-      <p>Try one of these:</p>
+      <div class="prompt">$ sql-agent --dataset olist --rows 550k</div>
+      <h2>Ask anything about 100k real e-commerce orders.</h2>
+      <p>The agent explores the schema, writes SQL, runs it safely and explains the result.</p>
       <div class="chips">
         <button class="chip">Which 5 product categories have the highest revenue?</button>
         <button class="chip">What percentage of delivered orders arrived late?</button>
@@ -78,16 +113,18 @@ input:focus { outline: 2px solid var(--accent); border-color: transparent; }
 </main>
 <footer>
   <form id="form">
-    <input id="q" placeholder="Ask about orders, revenue, deliveries, reviews..." autocomplete="off" maxlength="500">
-    <button class="send" id="send" type="submit">Ask</button>
+    <span class="ps1">&gt;</span>
+    <input id="q" placeholder="ask about orders, revenue, deliveries, reviews..." autocomplete="off" maxlength="500">
+    <button class="send" id="send" type="submit">RUN ⏎</button>
   </form>
+  <div class="hint">read-only access · 10 questions/hour · first load may take ~30s (free hosting)</div>
 </footer>
 <script>
 const LABELS = {
-  get_metric_definitions: "Reading metric definitions",
-  list_tables: "Listing tables",
-  describe_table: "Inspecting table",
-  run_query: "Running SQL query"
+  get_metric_definitions: "read metric definitions",
+  list_tables: "list tables",
+  describe_table: "inspect table",
+  run_query: "run SQL query"
 };
 const wrap = document.getElementById("wrap");
 const chat = document.getElementById("chat");
@@ -115,6 +152,67 @@ function setBusy(value) {
   if (!value) input.focus();
 }
 
+function addCopyButtons(container) {
+  container.querySelectorAll("pre").forEach(function (pre) {
+    const box = el("div", "codebox");
+    pre.parentNode.insertBefore(box, pre);
+    box.appendChild(pre);
+    const btn = el("button", "copy", "copy");
+    btn.type = "button";
+    btn.addEventListener("click", function () {
+      navigator.clipboard.writeText(pre.innerText).then(function () {
+        btn.textContent = "copied ✓";
+        setTimeout(function () { btn.textContent = "copy"; }, 1500);
+      });
+    });
+    box.appendChild(btn);
+  });
+}
+
+function toNumber(v) {
+  if (typeof v === "number") return v;
+  if (typeof v === "string" && v.trim() !== "") return Number(v);
+  return NaN;
+}
+
+function renderChart(rows) {
+  if (!Array.isArray(rows)) return null;
+  if (rows.length < 2) return null;
+  if (rows.length > 25) return null;
+  const cols = Object.keys(rows[0]);
+  let labelCol = null;
+  let valueCol = null;
+  cols.forEach(function (c) {
+    const numeric = rows.every(function (r) { return !isNaN(toNumber(r[c])); });
+    if (numeric && valueCol === null) valueCol = c;
+    if (!numeric && labelCol === null) labelCol = c;
+  });
+  if (labelCol === null && cols.length >= 2) {
+    labelCol = cols[0];
+    valueCol = cols[1];
+  }
+  if (labelCol === null) return null;
+  if (valueCol === null) return null;
+  const values = rows.map(function (r) { return toNumber(r[valueCol]); });
+  const max = Math.max.apply(null, values);
+  if (!(max > 0)) return null;
+
+  const box = el("div", "chart");
+  box.appendChild(el("h4", null, valueCol.replace(/_/g, " ") + " by " + labelCol.replace(/_/g, " ")));
+  rows.forEach(function (r, i) {
+    const row = el("div", "bar-row");
+    row.appendChild(el("div", "bar-label", String(r[labelCol])));
+    const track = el("div", "bar-track");
+    const fill = el("div", "bar-fill");
+    track.appendChild(fill);
+    row.appendChild(track);
+    row.appendChild(el("div", "bar-value", values[i].toLocaleString(undefined, { maximumFractionDigits: 2 })));
+    box.appendChild(row);
+    setTimeout(function () { fill.style.width = Math.max(2, (values[i] / max) * 100) + "%"; }, 50);
+  });
+  return box;
+}
+
 function ask(question) {
   if (busy) return;
   const empty = document.getElementById("empty");
@@ -123,38 +221,56 @@ function ask(question) {
   wrap.appendChild(el("div", "user", question));
   const bot = el("div", "bot");
   const steps = el("ul", "steps");
-  const thinking = el("div", "thinking", "Thinking");
+  const thinking = el("div", "thinking", "agent is thinking");
   const answer = el("div", "answer");
   bot.append(steps, thinking, answer);
   wrap.appendChild(bot);
   scrollDown();
   setBusy(true);
 
+  let lastRows = null;
+  let stepNo = 0;
   const source = new EventSource("/api/ask?q=" + encodeURIComponent(question));
 
   source.onmessage = function (msg) {
     const event = JSON.parse(msg.data);
     if (event.type === "tool_call") {
-      let label = LABELS[event.name] || event.name;
+      stepNo++;
+      let label = LABELS[event.name] ? LABELS[event.name] : event.name;
       if (event.name === "describe_table") label += ": " + event.args.table;
+      const prefix = "[" + String(stepNo).padStart(2, "0") + "] ";
       const li = el("li");
       if (event.name === "run_query") {
         const details = el("details");
-        details.appendChild(el("summary", null, label));
-        details.appendChild(el("pre", null, event.args.sql));
+        details.appendChild(el("summary", null, prefix + label));
+        const pre = el("pre");
+        pre.appendChild(el("code", null, event.args.sql));
+        details.appendChild(pre);
         li.appendChild(details);
+        addCopyButtons(details);
       } else {
-        li.textContent = label;
+        li.textContent = prefix + label;
       }
       steps.appendChild(li);
-    } else if (event.type === "tool_result" && event.isError) {
-      steps.appendChild(el("li", "err", "Query problem, adjusting: " + event.text.slice(0, 200)));
+      thinking.textContent = "agent is thinking";
+    } else if (event.type === "tool_result") {
+      if (event.isError) {
+        steps.appendChild(el("li", "err", "query problem, adjusting: " + event.text.slice(0, 160)));
+      } else if (event.name === "run_query") {
+        try { lastRows = JSON.parse(event.text).rows; } catch (e) { lastRows = null; }
+      }
     } else if (event.type === "retry") {
-      thinking.textContent = "Rate limited, waiting " + event.waitSeconds + "s";
+      thinking.textContent = "provider busy, retrying in " + event.waitSeconds + "s";
     } else if (event.type === "answer") {
       answer.innerHTML = DOMPurify.sanitize(marked.parse(event.text));
+      const chart = renderChart(lastRows);
+      if (chart) {
+        const first = answer.firstElementChild;
+        answer.insertBefore(chart, first ? first.nextSibling : null);
+      }
+      addCopyButtons(answer);
     } else if (event.type === "error") {
-      answer.appendChild(el("p", "err", "Error: " + event.message));
+      answer.appendChild(el("p", "err-msg", "error: " + event.message));
     } else if (event.type === "done") {
       source.close();
       thinking.remove();
@@ -166,7 +282,7 @@ function ask(question) {
   source.onerror = function () {
     source.close();
     thinking.remove();
-    answer.appendChild(el("p", "err", "Connection lost. Please try again."));
+    answer.appendChild(el("p", "err-msg", "connection lost, please try again."));
     setBusy(false);
   };
 }
