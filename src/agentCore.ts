@@ -10,7 +10,11 @@ export type AgentEvent =
   | { type: "answer"; text: string }
   | { type: "error"; message: string };
 
-const MODEL = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
+// Provider settings: LLM_ variables win; GROQ_ variables are the fallback
+const BASE_URL = process.env.LLM_BASE_URL || "https://api.groq.com/openai/v1";
+const API_KEY = process.env.LLM_API_KEY || process.env.GROQ_API_KEY;
+const MODEL = process.env.LLM_MODEL || process.env.GROQ_MODEL || "openai/gpt-oss-120b";
+
 const MAX_STEPS = 10;
 const MAX_RETRIES = 3;
 
@@ -24,35 +28,55 @@ const SYSTEM_PROMPT = [
   "Answer concisely in plain English, and show the final SQL you used at the end.",
 ].join("\n");
 
-async function callGroq(messages: Message[], tools: Message[], onEvent: (event: AgentEvent) => void): Promise<Message> {
+const RETRYABLE_STATUS = [429, 500, 502, 503, 504];
+
+async function callLLM(messages: Message[], tools: Message[], onEvent: (event: AgentEvent) => void): Promise<Message> {
   for (let attempt = 0; ; attempt++) {
-    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer " + process.env.GROQ_API_KEY,
-      },
-      body: JSON.stringify({ model: MODEL, messages, tools, tool_choice: "auto", temperature: 0 }),
-    });
+    let res: Response;
+    try {
+      res = await fetch(BASE_URL + "/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer " + API_KEY,
+        },
+        body: JSON.stringify({ model: MODEL, messages, tools, tool_choice: "auto", temperature: 0 }),
+      });
+    } catch (err) {
+      // Network-level failure (connection reset, timeout): temporary, so retry
+      if (attempt < MAX_RETRIES) {
+        const waitSeconds = 5 * 2 ** attempt;
+        onEvent({ type: "retry", waitSeconds, attempt: attempt + 1 });
+        await new Promise((resolve) => setTimeout(resolve, waitSeconds * 1000));
+        continue;
+      }
+      throw err;
+    }
+
     if (res.ok) {
       const data = await res.json();
       return data.choices[0].message;
     }
-    if (res.status === 429 && attempt < MAX_RETRIES) {
+
+    // 429 = rate limited, 5xx = server problem: both are temporary, so retry
+    if (RETRYABLE_STATUS.includes(res.status) && attempt < MAX_RETRIES) {
       const retryAfter = Number(res.headers.get("retry-after"));
       const waitSeconds = retryAfter > 0 ? retryAfter + 1 : 5 * 2 ** attempt;
       onEvent({ type: "retry", waitSeconds, attempt: attempt + 1 });
       await new Promise((resolve) => setTimeout(resolve, waitSeconds * 1000));
       continue;
     }
-    throw new Error("Groq API error " + res.status + ": " + (await res.text()));
+
+    throw new Error("LLM API error " + res.status + ": " + (await res.text()));
   }
 }
 
 export async function createAgent() {
-  if (!process.env.GROQ_API_KEY) {
-    throw new Error("GROQ_API_KEY is not set");
+  if (!API_KEY) {
+    throw new Error("No API key set: add LLM_API_KEY (or GROQ_API_KEY) to .env");
   }
+  // Log which model and provider are in use (never log the key itself)
+  console.error("[agent] model=" + MODEL + " provider=" + BASE_URL);
 
   const transport = new StdioClientTransport({
     command: process.execPath,
@@ -75,15 +99,15 @@ export async function createAgent() {
     ];
     try {
       for (let step = 1; step <= MAX_STEPS; step++) {
-        const reply = await callGroq(messages, llmTools, onEvent);
-
+        const reply = await callLLM(messages, llmTools, onEvent);
         if (!reply.tool_calls || reply.tool_calls.length === 0) {
           onEvent({ type: "answer", text: reply.content ?? "" });
           return;
         }
 
         messages.push({ role: "assistant", content: reply.content ?? "", tool_calls: reply.tool_calls });
-for (const call of reply.tool_calls) {
+
+        for (const call of reply.tool_calls) {
           let args: Message = {};
           try {
             args = JSON.parse(call.function.arguments || "{}");
@@ -100,7 +124,9 @@ for (const call of reply.tool_calls) {
       }
       onEvent({ type: "error", message: "Stopped after " + MAX_STEPS + " steps without a final answer." });
     } catch (err) {
-      onEvent({ type: "error", message: (err as Error).message });
+      const e = err as Error & { cause?: any };
+      const detail = e.cause ? " (cause: " + (e.cause.code || e.cause.message || String(e.cause)) + ")" : "";
+      onEvent({ type: "error", message: e.message + detail });
     }
   }
 

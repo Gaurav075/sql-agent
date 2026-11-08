@@ -4,7 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "tsx src/web.ts",
+    "dev": "tsx --env-file=.env src/web.ts"
   },
   "keywords": [],
   "author": "",
@@ -26,5 +28,8 @@
     "@types/pg-copy-streams": "^1.2.5",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }
